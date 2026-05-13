@@ -2,9 +2,9 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'DOCKER_IMAGE_BASENAME', defaultValue: 'azaliaz/ml_cicd_db', description: 'DockerHub repo/image')
+    string(name: 'DOCKER_IMAGE_BASENAME', defaultValue: 'azaliaz/ml_cicd_db_3', description: 'DockerHub repo/image')
     booleanParam(name: 'TRIGGER_CD', defaultValue: true, description: 'Trigger CD job after successful push')
-    string(name: 'CD_JOB_NAME', defaultValue: 'ml-cicd-db-cd', description: 'Target Jenkins CD job name')
+    string(name: 'CD_JOB_NAME', defaultValue: 'ml-cicd-db-cd_3', description: 'Target Jenkins CD job name')
   }
 
   environment {

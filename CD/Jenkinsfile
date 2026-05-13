@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'DOCKER_IMAGE', defaultValue: 'azaliaz/ml_cicd_db:latest', description: 'Образ из registry')
+    string(name: 'DOCKER_IMAGE', defaultValue: 'azaliaz/ml_cicd_db_3:latest', description: 'Образ из registry')
     string(name: 'HOST_PORT', defaultValue: '18080', description: 'Порт на агенте для API')
     string(name: 'DB_PORT', defaultValue: '55432', description: 'Порт PostgreSQL на агенте')
     string(name: 'DB_NAME', defaultValue: 'housing', description: 'Имя БД PostgreSQL')
