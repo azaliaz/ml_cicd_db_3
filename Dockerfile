@@ -24,6 +24,11 @@ COPY scenario.json /app/scenario.json
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh
 
+# Модель в образе: быстрый старт контейнера при SKIP_PREPROCESS_TRAIN=1 (CD). Локально entrypoint по умолчанию переобучает.
+RUN mkdir -p /app/data/raw /app/data/processed /app/models \
+    && python -m src.preprocess \
+    && python -m src.train
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
