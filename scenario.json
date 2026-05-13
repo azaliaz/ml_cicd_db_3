@@ -1,0 +1,43 @@
+{
+  "description": "Функциональные сценарии для запущенного контейнера API (CD / локальная проверка). base_url задаётся переменной SCENARIO_BASE_URL или аргументом --base-url.",
+  "default_base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    {
+      "id": "health_ok",
+      "request": {
+        "method": "GET",
+        "path": "/health"
+      },
+      "expect": {
+        "status": 200,
+        "json": {
+          "status": "ok"
+        }
+      }
+    },
+    {
+      "id": "predict_ok",
+      "request": {
+        "method": "POST",
+        "path": "/predict",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "json": {
+          "MedInc": 8.3252,
+          "HouseAge": 41.0,
+          "AveRooms": 6.984127,
+          "AveBedrms": 1.02381,
+          "Population": 322.0,
+          "AveOccup": 2.555556,
+          "Latitude": 37.88,
+          "Longitude": -122.23
+        }
+      },
+      "expect": {
+        "status": 200,
+        "json_keys": ["median_house_value", "prediction_id"]
+      }
+    }
+  ]
+}

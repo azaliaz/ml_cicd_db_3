@@ -1,0 +1,158 @@
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'DOCKER_IMAGE', defaultValue: 'azaliaz/ml_cicd_db:latest', description: 'Образ из registry')
+    string(name: 'HOST_PORT', defaultValue: '18080', description: 'Порт на агенте для API')
+    string(name: 'DB_PORT', defaultValue: '55432', description: 'Порт PostgreSQL на агенте')
+    string(name: 'DB_NAME', defaultValue: 'housing', description: 'Имя БД PostgreSQL')
+    booleanParam(name: 'RUN_PYTEST_IN_CONTAINER', defaultValue: true, description: 'CD: pytest внутри контейнера')
+    booleanParam(name: 'RUN_SCENARIOS', defaultValue: true, description: 'CD: сценарии против поднятого API')
+  }
+
+  triggers { cron('H 2 * * *') }
+
+  environment {
+    SCENARIO_BASE_URL = "http://127.0.0.1:${params.HOST_PORT}"
+    APP_CONTAINER = "housing-api-cd"
+    DB_CONTAINER = "housing-db-cd"
+    VAULT_CONTAINER = "housing-vault-cd"
+    VAULT_DEV_TOKEN = "cd-vault-root"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Resolve project dir') {
+      steps {
+        script {
+          env.GIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+        }
+      }
+    }
+
+    stage('Pull image') {
+      steps {
+        sh 'docker pull "${DOCKER_IMAGE}"'
+      }
+    }
+
+    stage('Build Vault image (secrets store)') {
+      steps {
+        sh 'docker build -f Dockerfile.vault -t housing-vault:cd .'
+      }
+    }
+
+    stage('Pytest inside container (CD)') {
+      when {
+        expression { return params.RUN_PYTEST_IN_CONTAINER }
+      }
+      steps {
+        sh 'docker run --rm -e SHOW_LOG=false --entrypoint python -w /app "${DOCKER_IMAGE}" -m pytest -q tests'
+      }
+    }
+
+    stage('Run PostgreSQL + API containers') {
+      when {
+        expression { return params.RUN_SCENARIOS }
+      }
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'postgres-app-user', usernameVariable: 'DB_USER_CRED', passwordVariable: 'DB_PASSWORD_CRED')
+        ]) {
+          sh '''
+            set -e
+            docker network create cd-net 2>/dev/null || true
+            docker rm -f "${APP_CONTAINER}" "${DB_CONTAINER}" "${VAULT_CONTAINER}" 2>/dev/null || true
+
+            docker run -d --name "${DB_CONTAINER}" \
+              --network cd-net \
+              -e POSTGRES_DB="${DB_NAME}" \
+              -e POSTGRES_USER="${DB_USER_CRED}" \
+              -e POSTGRES_PASSWORD="${DB_PASSWORD_CRED}" \
+              -p "${DB_PORT}:5432" \
+              postgres:16-alpine
+
+            for i in $(seq 1 60); do
+              if docker exec "${DB_CONTAINER}" pg_isready -U "${DB_USER_CRED}" -d "${DB_NAME}" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+
+            docker run -d --name "${VAULT_CONTAINER}" \
+              --network cd-net \
+              -e VAULT_DEV_ROOT_TOKEN_ID="${VAULT_DEV_TOKEN}" \
+              -e VAULT_SEED_DB_USER="${DB_USER_CRED}" \
+              -e VAULT_SEED_DB_PASSWORD="${DB_PASSWORD_CRED}" \
+              -e VAULT_SEED_DB_NAME="${DB_NAME}" \
+              -e VAULT_SEED_DB_HOST="${DB_CONTAINER}" \
+              -e VAULT_SEED_DB_PORT="5432" \
+              housing-vault:cd
+
+            for i in $(seq 1 60); do
+              if docker exec "${VAULT_CONTAINER}" sh -c "VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=\"${VAULT_DEV_TOKEN}\" vault kv get secret/housing/db" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+
+            docker run -d --name "${APP_CONTAINER}" \
+              --network cd-net \
+              -p "${HOST_PORT}:8000" \
+              -e VAULT_ADDR="http://${VAULT_CONTAINER}:8200" \
+              -e VAULT_TOKEN="${VAULT_DEV_TOKEN}" \
+              -e VAULT_SECRET_PATH="secret/data/housing/db" \
+              "${DOCKER_IMAGE}"
+          '''
+        }
+      }
+    }
+
+    stage('Wait for health') {
+      when {
+        expression { return params.RUN_SCENARIOS }
+      }
+      steps {
+        sh '''
+          for i in $(seq 1 60); do
+            if docker exec "${APP_CONTAINER}" curl -fsS "http://127.0.0.1:8000/health"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Healthcheck timeout"; exit 1
+        '''
+      }
+    }
+
+    stage('Functional scenarios (host → container)') {
+      when {
+        expression { return params.RUN_SCENARIOS }
+      }
+      steps {
+        sh '''
+          mkdir -p artifacts
+          docker exec "${APP_CONTAINER}" python scripts/run_scenarios.py \
+            --base-url "http://127.0.0.1:8000" \
+            --report-json /tmp/functional_report.json
+          docker cp "${APP_CONTAINER}:/tmp/functional_report.json" artifacts/functional_report.json
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'artifacts/functional_report.json', allowEmptyArchive: true
+      sh '''
+        docker rm -f "${APP_CONTAINER}" "${DB_CONTAINER}" "${VAULT_CONTAINER}" 2>/dev/null || true
+        docker network rm cd-net 2>/dev/null || true
+      '''
+    }
+  }
+}

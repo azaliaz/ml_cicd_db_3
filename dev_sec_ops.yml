@@ -1,0 +1,14 @@
+version: 1
+docker:
+  image: ${DOCKER_IMAGE:-docker.io/azaliaz/ml-course-assignment:latest}
+  digest: sha256:e814bcb11e94a3098eb8c81c02dcb790afc96a46dc9995c370fb8ac072cda37f
+  signature: null
+git:
+  last_five_commits:
+  - 18095ebb99db2002a6631ee97bd6b853088ec308
+  - f40f1599676d24c2ea36d7e16e5eea22f3f8d71a
+  - e12a89354466501a9ccda492598706d643648b70
+  - a49001708eac4de03ad34a792ac460ccaa2203a1
+  - 84de33633ca58a65a6bbc4acac83100cee9b1928
+quality:
+  test_coverage_percent: 86.21

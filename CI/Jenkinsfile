@@ -1,0 +1,80 @@
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'DOCKER_IMAGE_BASENAME', defaultValue: 'azaliaz/ml_cicd_db', description: 'DockerHub repo/image')
+    booleanParam(name: 'TRIGGER_CD', defaultValue: true, description: 'Trigger CD job after successful push')
+    string(name: 'CD_JOB_NAME', defaultValue: 'ml-cicd-db-cd', description: 'Target Jenkins CD job name')
+  }
+
+  environment {
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+    GIT_SHORT = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'local'}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          env.GIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+          env.FULL_IMAGE = "${params.DOCKER_IMAGE_BASENAME}:${env.IMAGE_TAG}"
+          env.FULL_IMAGE_SHA = "${params.DOCKER_IMAGE_BASENAME}:sha-${env.GIT_SHORT}"
+        }
+      }
+    }
+
+    stage('Build image') {
+      steps {
+        sh 'docker build -t "${FULL_IMAGE}" -t "${FULL_IMAGE_SHA}" .'
+      }
+    }
+
+    stage('Pytest inside container (CI)') {
+      steps {
+        sh 'docker run --rm -e SHOW_LOG=false --entrypoint python -w /app "${FULL_IMAGE}" -m pytest -q tests'
+      }
+    }
+
+    stage('Push to Docker Hub') {
+      when {
+        expression {
+          def b = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').toLowerCase()
+          return b.contains('main') || b.contains('develop')
+        }
+      }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sh '''
+            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+            docker push "${FULL_IMAGE}"
+            docker push "${FULL_IMAGE_SHA}"
+            if [ "${BRANCH_NAME}" = "main" ]; then
+              docker tag "${FULL_IMAGE}" "${DOCKER_IMAGE_BASENAME}:latest"
+              docker push "${DOCKER_IMAGE_BASENAME}:latest"
+            fi
+          '''
+        }
+      }
+    }
+
+    stage('Trigger CD pipeline') {
+      when {
+        expression {
+          def b = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').toLowerCase()
+          return params.TRIGGER_CD && (b.contains('main') || b.contains('develop'))
+        }
+      }
+      steps {
+        build job: params.CD_JOB_NAME,
+          wait: false,
+          parameters: [
+            string(name: 'DOCKER_IMAGE', value: "${FULL_IMAGE}"),
+            string(name: 'HOST_PORT', value: '18080'),
+            booleanParam(name: 'RUN_PYTEST_IN_CONTAINER', value: false),
+            booleanParam(name: 'RUN_SCENARIOS', value: true)
+          ]
+      }
+    }
+  }
+}
