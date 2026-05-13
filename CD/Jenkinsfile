@@ -119,13 +119,14 @@ pipeline {
       }
       steps {
         sh '''
-          for i in $(seq 1 60); do
+          # Внутри контейнера API всегда на :8000 (см. uvicorn в entrypoint). HOST_PORT — только проброс на хост.
+          for i in $(seq 1 120); do
             if docker exec "${APP_CONTAINER}" curl -fsS "http://127.0.0.1:8000/health"; then
               exit 0
             fi
-            sleep 2
+            sleep 5
           done
-          echo "Healthcheck timeout"; exit 1
+          echo "Healthcheck timeout (проверьте логи: docker logs ${APP_CONTAINER})"; exit 1
         '''
       }
     }
