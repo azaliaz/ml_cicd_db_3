@@ -1,0 +1,9 @@
+# Образ хранилища секретов: на этапе сборки копируется сценарий инициализации KV.
+# Секреты в образ не вшиваются — подставляются при запуске контейнера через env.
+FROM hashicorp/vault:1.17
+
+COPY docker/vault/entrypoint-vault.sh /entrypoint-vault.sh
+RUN chmod +x /entrypoint-vault.sh
+
+EXPOSE 8200
+ENTRYPOINT ["/entrypoint-vault.sh"]

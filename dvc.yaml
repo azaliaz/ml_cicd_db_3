@@ -1,0 +1,23 @@
+stages:
+  prepare:
+    cmd: python -m src.preprocess
+    deps:
+      - src/preprocess.py
+      - src/paths.py
+      - params.yaml
+    params:
+      - params.yaml:
+          - preprocess.test_size
+          - preprocess.random_state
+    outs:
+      - data/raw
+      - data/processed
+  train:
+    cmd: python -m src.train
+    deps:
+      - src/train.py
+      - src/paths.py
+      - config.ini
+      - data/processed
+    outs:
+      - models/model.joblib

@@ -1,0 +1,57 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: python -m src.preprocess
+    deps:
+    - path: params.yaml
+      hash: md5
+      md5: 213d5d486bbcb5d22b1afac66df7a7c2
+      size: 48
+    - path: src/paths.py
+      hash: md5
+      md5: 68848e83c02ab7fcf990347090085ed8
+      size: 480
+    - path: src/preprocess.py
+      hash: md5
+      md5: 18fd15b872f1442fb465306811ed26f1
+      size: 3156
+    params:
+      params.yaml:
+        preprocess.random_state: 42
+        preprocess.test_size: 0.2
+    outs:
+    - path: data/processed
+      hash: md5
+      md5: bd8c6e04a6ed11c06d705649532cf39a.dir
+      size: 1895240
+      nfiles: 4
+    - path: data/raw
+      hash: md5
+      md5: affae6deacee454c64eb5ce5924ea0e6.dir
+      size: 1895154
+      nfiles: 1
+  train:
+    cmd: python -m src.train
+    deps:
+    - path: config.ini
+      hash: md5
+      md5: 5b57bc088091e637e22ea53658544b0e
+      size: 72
+    - path: data/processed
+      hash: md5
+      md5: bd8c6e04a6ed11c06d705649532cf39a.dir
+      size: 1895240
+      nfiles: 4
+    - path: src/paths.py
+      hash: md5
+      md5: 68848e83c02ab7fcf990347090085ed8
+      size: 480
+    - path: src/train.py
+      hash: md5
+      md5: 1ce2c8d1acef95d3b3a4e02eb252f3b1
+      size: 4544
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: dd0fbae246ac0da7cc957ae9113ef35b
+      size: 24616176
